@@ -36,11 +36,13 @@ LauncherGui.Name = "AERO_Launcher"
 LauncherGui.DisplayOrder = 9999
 LauncherGui.ResetOnSpawn = false
 LauncherGui.Parent = (gethui and gethui()) or Player:WaitForChild("PlayerGui")
+LauncherGui.IgnoreGuiInset = true
 
 -- Variabel untuk drag functionality
 local LogoDragging = false
 local LogoDragStartPos
 local LogoStartPos
+local TouchId = nil
 
 -- Logo Button
 local LogoBtn = Instance.new("ImageButton")
@@ -67,10 +69,15 @@ LogoStroke.Color = Color3.fromRGB(100, 100, 100)
 LogoStroke.Transparency = 0.7
 LogoStroke.Parent = LogoBtn
 
--- // FUNGSI DRAG LOGO
+-- // FUNGSI DRAG LOGO (SUPPORT MOBILE)
 local function StartLogoDrag(input)
     LogoDragging = true
-    LogoDragStartPos = input.Position
+    if input.UserInputType == Enum.UserInputType.Touch then
+        TouchId = input.Position
+        LogoDragStartPos = input.Position
+    else
+        LogoDragStartPos = input.Position
+    end
     LogoStartPos = LogoBtn.Position
     LogoBtn.ImageTransparency = 0
     LogoStroke.Transparency = 0.3
@@ -78,24 +85,44 @@ end
 
 local function EndLogoDrag()
     LogoDragging = false
+    TouchId = nil
     LogoBtn.ImageTransparency = 0.2
     LogoStroke.Transparency = 0.7
 end
 
+-- Handle input untuk desktop dan mobile
 LogoBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         StartLogoDrag(input)
     end
 end)
 
 LogoBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         EndLogoDrag()
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
+-- Drag untuk mouse
+UserInputService.InputChanged:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
     if LogoDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - LogoDragStartPos
+        LogoBtn.Position = UDim2.new(
+            LogoStartPos.X.Scale, 
+            LogoStartPos.X.Offset + delta.X,
+            LogoStartPos.Y.Scale, 
+            LogoStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Drag untuk touch (mobile)
+UserInputService.TouchMoved:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if LogoDragging and input.UserInputType == Enum.UserInputType.Touch then
         local delta = input.Position - LogoDragStartPos
         LogoBtn.Position = UDim2.new(
             LogoStartPos.X.Scale, 
@@ -424,6 +451,7 @@ ScreenGui.Enabled = false
 ScreenGui.DisplayOrder = 10000
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (gethui and gethui()) or Player:WaitForChild("PlayerGui")
+ScreenGui.IgnoreGuiInset = true
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 220, 0, 250)
@@ -655,26 +683,45 @@ local function ToggleGUI()
     end
 end
 
+-- Improved click/tap detection for mobile
 local logoClickTime = 0
+local isTouch = false
+
 LogoBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         logoClickTime = tick()
+        if input.UserInputType == Enum.UserInputType.Touch then
+            isTouch = true
+        end
         StartLogoDrag(input)
     end
 end)
 
 LogoBtn.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         local clickDuration = tick() - logoClickTime
         EndLogoDrag()
         
-        if clickDuration < 0.2 then
+        -- Deteksi tap/clicks
+        if clickDuration < 0.3 then
             ToggleGUI()
         end
+        isTouch = false
+    end
+end)
+
+-- Tambahkan touch tap untuk mobile
+LogoBtn.TouchTap:Connect(function()
+    if not LogoDragging then
+        ToggleGUI()
     end
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
+    CloseGUI()
+end)
+
+CloseBtn.TouchTap:Connect(function()
     CloseGUI()
 end)
 
@@ -750,12 +797,150 @@ BackBtn.MouseButton1Click:Connect(function()
     PreviousPlayer()
 end)
 
+BackBtn.TouchTap:Connect(function()
+    PreviousPlayer()
+end)
+
 NextBtn.MouseButton1Click:Connect(function()
+    NextPlayer()
+end)
+
+NextBtn.TouchTap:Connect(function()
     NextPlayer()
 end)
 
 TargetBtn.MouseButton1Click:Connect(function()
     NextPlayer()
+end)
+
+TargetBtn.TouchTap:Connect(function()
+    NextPlayer()
+end)
+
+ModeBtn.MouseButton1Click:Connect(function()
+    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
+    ModeBtn.Text = "MODE: " .. CurrentMode
+end)
+
+ModeBtn.TouchTap:Connect(function()
+    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
+    ModeBtn.Text = "MODE: " .. CurrentMode
+end)
+
+ViewBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    IsViewing = not IsViewing
+    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
+    
+    if IsViewing and TargetPlayer.Character then
+        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            Camera.CameraSubject = hum
+        end
+    else
+        if Player.Character then
+            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                Camera.CameraSubject = hum
+            end
+        end
+    end
+end)
+
+ViewBtn.TouchTap:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    IsViewing = not IsViewing
+    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
+    
+    if IsViewing and TargetPlayer.Character then
+        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            Camera.CameraSubject = hum
+        end
+    else
+        if Player.Character then
+            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                Camera.CameraSubject = hum
+            end
+        end
+    end
+end)
+
+FlingBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    
+    local char = Player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    IsFlinging = not IsFlinging
+    
+    if IsFlinging then
+        if hrp then LastPosition = hrp.CFrame end
+        workspace.FallenPartsDestroyHeight = 0/0 
+        FlingBtn.Text = "STOP"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    else
+        FlingBtn.Text = "LAUNCH"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
+        
+        if hum and hrp and LastPosition then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hum.Sit = false
+            hrp.CFrame = LastPosition
+            task.wait(0.05)
+            hum.Jump = true 
+            LastPosition = nil
+        end
+
+        workspace.FallenPartsDestroyHeight = -500 
+    end
+end)
+
+FlingBtn.TouchTap:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    
+    local char = Player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    IsFlinging = not IsFlinging
+    
+    if IsFlinging then
+        if hrp then LastPosition = hrp.CFrame end
+        workspace.FallenPartsDestroyHeight = 0/0 
+        FlingBtn.Text = "STOP"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    else
+        FlingBtn.Text = "LAUNCH"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
+        
+        if hum and hrp and LastPosition then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hum.Sit = false
+            hrp.CFrame = LastPosition
+            task.wait(0.05)
+            hum.Jump = true 
+            LastPosition = nil
+        end
+
+        workspace.FallenPartsDestroyHeight = -500 
+    end
 end)
 
 -- // VEHICLE LOGIC
@@ -826,69 +1011,6 @@ RunService.PostSimulation:Connect(function()
                 end
             end
         end
-    end
-end)
-
-ModeBtn.MouseButton1Click:Connect(function()
-    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
-    ModeBtn.Text = "MODE: " .. CurrentMode
-end)
-
-ViewBtn.MouseButton1Click:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    IsViewing = not IsViewing
-    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
-    
-    if IsViewing and TargetPlayer.Character then
-        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            Camera.CameraSubject = hum
-        end
-    else
-        if Player.Character then
-            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                Camera.CameraSubject = hum
-            end
-        end
-    end
-end)
-
-FlingBtn.MouseButton1Click:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    
-    local char = Player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-    IsFlinging = not IsFlinging
-    
-    if IsFlinging then
-        if hrp then LastPosition = hrp.CFrame end
-        workspace.FallenPartsDestroyHeight = 0/0 
-        FlingBtn.Text = "STOP"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    else
-        FlingBtn.Text = "LAUNCH"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
-        
-        if hum and hrp and LastPosition then
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            hum.Sit = false
-            hrp.CFrame = LastPosition
-            task.wait(0.05)
-            hum.Jump = true 
-            LastPosition = nil
-        end
-
-        workspace.FallenPartsDestroyHeight = -500 
     end
 end)
 
