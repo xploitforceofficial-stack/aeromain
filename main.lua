@@ -10,6 +10,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local TouchInputService = game:GetService("TouchInputService")
 local Player = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -30,19 +31,24 @@ local CurrentPlayerIndex = 1
 local FlingPower = 9e7 
 local RotPower = 9e8
 
+-- // DETECT MOBILE
+local function IsMobile()
+    return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+end
+
 -- // LAUNCHER LOGO SETUP
 local LauncherGui = Instance.new("ScreenGui")
 LauncherGui.Name = "AERO_Launcher"
 LauncherGui.DisplayOrder = 9999
 LauncherGui.ResetOnSpawn = false
 LauncherGui.Parent = (gethui and gethui()) or Player:WaitForChild("PlayerGui")
-LauncherGui.IgnoreGuiInset = true
+LauncherGui.IgnoreGuiInset = true -- Penting untuk mobile
 
 -- Variabel untuk drag functionality
 local LogoDragging = false
 local LogoDragStartPos
 local LogoStartPos
-local TouchId = nil
+local LogoDragTouchId = nil
 
 -- Logo Button
 local LogoBtn = Instance.new("ImageButton")
@@ -56,6 +62,7 @@ LogoBtn.ScaleType = Enum.ScaleType.Fit
 LogoBtn.Active = true
 LogoBtn.Selectable = true
 LogoBtn.Parent = LauncherGui
+LogoBtn.AutoButtonColor = false -- Matikan efek auto untuk mobile
 
 -- Buat logo menjadi lingkaran
 local LogoCorner = Instance.new("UICorner")
@@ -73,7 +80,7 @@ LogoStroke.Parent = LogoBtn
 local function StartLogoDrag(input)
     LogoDragging = true
     if input.UserInputType == Enum.UserInputType.Touch then
-        TouchId = input.Position
+        LogoDragTouchId = input.KeyCode -- Simpan touch ID
         LogoDragStartPos = input.Position
     else
         LogoDragStartPos = input.Position
@@ -85,12 +92,12 @@ end
 
 local function EndLogoDrag()
     LogoDragging = false
-    TouchId = nil
+    LogoDragTouchId = nil
     LogoBtn.ImageTransparency = 0.2
     LogoStroke.Transparency = 0.7
 end
 
--- Handle input untuk desktop dan mobile
+-- Handle input untuk mouse dan touch
 LogoBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         StartLogoDrag(input)
@@ -99,15 +106,23 @@ end)
 
 LogoBtn.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        -- Cek apakah ini touch yang sama
+        if input.UserInputType == Enum.UserInputType.Touch and input.KeyCode ~= LogoDragTouchId then
+            return
+        end
         EndLogoDrag()
     end
 end)
 
--- Drag untuk mouse
-UserInputService.InputChanged:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+-- Handle drag movement untuk mouse dan touch
+UserInputService.InputChanged:Connect(function(input, processed)
+    if not LogoDragging then return end
     
-    if LogoDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+    -- Skip jika input diproses oleh game
+    if processed then return end
+    
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        -- Mouse drag
         local delta = input.Position - LogoDragStartPos
         LogoBtn.Position = UDim2.new(
             LogoStartPos.X.Scale, 
@@ -115,38 +130,36 @@ UserInputService.InputChanged:Connect(function(input, gameProcessed)
             LogoStartPos.Y.Scale, 
             LogoStartPos.Y.Offset + delta.Y
         )
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        -- Touch drag - pastikan touch ID sama
+        if input.KeyCode == LogoDragTouchId then
+            local delta = input.Position - LogoDragStartPos
+            LogoBtn.Position = UDim2.new(
+                LogoStartPos.X.Scale, 
+                LogoStartPos.X.Offset + delta.X,
+                LogoStartPos.Y.Scale, 
+                LogoStartPos.Y.Offset + delta.Y
+            )
+        end
     end
 end)
 
--- Drag untuk touch (mobile)
-UserInputService.TouchMoved:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if LogoDragging and input.UserInputType == Enum.UserInputType.Touch then
-        local delta = input.Position - LogoDragStartPos
-        LogoBtn.Position = UDim2.new(
-            LogoStartPos.X.Scale, 
-            LogoStartPos.X.Offset + delta.X,
-            LogoStartPos.Y.Scale, 
-            LogoStartPos.Y.Offset + delta.Y
-        )
-    end
-end)
+-- Hover effect hanya untuk desktop
+if not IsMobile() then
+    LogoBtn.MouseEnter:Connect(function()
+        if not LogoDragging then
+            LogoBtn.ImageTransparency = 0
+            LogoStroke.Transparency = 0.3
+        end
+    end)
 
--- Hover effect normal
-LogoBtn.MouseEnter:Connect(function()
-    if not LogoDragging then
-        LogoBtn.ImageTransparency = 0
-        LogoStroke.Transparency = 0.3
-    end
-end)
-
-LogoBtn.MouseLeave:Connect(function()
-    if not LogoDragging then
-        LogoBtn.ImageTransparency = 0.2
-        LogoStroke.Transparency = 0.7
-    end
-end)
+    LogoBtn.MouseLeave:Connect(function()
+        if not LogoDragging then
+            LogoBtn.ImageTransparency = 0.2
+            LogoStroke.Transparency = 0.7
+        end
+    end)
+end
 
 -- // FUNGSI UNTUK UPDATE PLAYER LIST
 local function UpdatePlayerList()
@@ -451,14 +464,14 @@ ScreenGui.Enabled = false
 ScreenGui.DisplayOrder = 10000
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (gethui and gethui()) or Player:WaitForChild("PlayerGui")
-ScreenGui.IgnoreGuiInset = true
+ScreenGui.IgnoreGuiInset = true -- Penting untuk mobile
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 220, 0, 250)
 MainFrame.Position = UDim2.new(0.5, -110, 0.5, -125)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 MainFrame.Active = true
-MainFrame.Draggable = true
+MainFrame.Draggable = not IsMobile() -- Non-draggable di mobile karena akan mengganggu
 MainFrame.BackgroundTransparency = 1
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
@@ -488,6 +501,7 @@ ModeBtn.TextColor3 = Color3.new(1, 1, 1)
 ModeBtn.BackgroundTransparency = 1
 ModeBtn.TextTransparency = 1
 ModeBtn.Parent = MainFrame
+ModeBtn.AutoButtonColor = false
 
 local TargetFrame = Instance.new("Frame")
 TargetFrame.Size = UDim2.new(0.9, 0, 0, 40)
@@ -507,6 +521,7 @@ BackBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 BackBtn.BackgroundTransparency = 1
 BackBtn.TextTransparency = 1
 BackBtn.Parent = TargetFrame
+BackBtn.AutoButtonColor = false
 
 local TargetBtn = Instance.new("TextButton")
 TargetBtn.Size = UDim2.new(0, 110, 1, 0)
@@ -518,6 +533,7 @@ TargetBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 TargetBtn.BackgroundTransparency = 1
 TargetBtn.TextTransparency = 1
 TargetBtn.Parent = TargetFrame
+TargetBtn.AutoButtonColor = false
 
 local NextBtn = Instance.new("TextButton")
 NextBtn.Size = UDim2.new(0, 30, 1, 0)
@@ -530,6 +546,7 @@ NextBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 NextBtn.BackgroundTransparency = 1
 NextBtn.TextTransparency = 1
 NextBtn.Parent = TargetFrame
+NextBtn.AutoButtonColor = false
 
 local backCorner = Instance.new("UICorner")
 backCorner.CornerRadius = UDim.new(0, 5)
@@ -552,6 +569,7 @@ ViewBtn.TextColor3 = Color3.new(1, 1, 1)
 ViewBtn.BackgroundTransparency = 1
 ViewBtn.TextTransparency = 1
 ViewBtn.Parent = MainFrame
+ViewBtn.AutoButtonColor = false
 
 local FlingBtn = Instance.new("TextButton")
 FlingBtn.Size = UDim2.new(0.9, 0, 0, 45)
@@ -562,6 +580,7 @@ FlingBtn.TextColor3 = Color3.new(1, 1, 1)
 FlingBtn.BackgroundTransparency = 1
 FlingBtn.TextTransparency = 1
 FlingBtn.Parent = MainFrame
+FlingBtn.AutoButtonColor = false
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 25, 0, 25)
@@ -574,6 +593,29 @@ CloseBtn.BorderSizePixel = 0
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.TextTransparency = 1
 CloseBtn.Parent = MainFrame
+CloseBtn.AutoButtonColor = false
+
+-- Tambahkan UICorner untuk FlingBtn
+local flingCorner = Instance.new("UICorner")
+flingCorner.CornerRadius = UDim.new(0, 8)
+flingCorner.Parent = FlingBtn
+
+-- Tambahkan UICorner untuk semua tombol
+local modeCorner = Instance.new("UICorner")
+modeCorner.CornerRadius = UDim.new(0, 5)
+modeCorner.Parent = ModeBtn
+
+local viewCorner = Instance.new("UICorner")
+viewCorner.CornerRadius = UDim.new(0, 5)
+viewCorner.Parent = ViewBtn
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 5)
+closeCorner.Parent = CloseBtn
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = MainFrame
 
 -- // FUNGSI TOGGLE GUI
 local function OpenGUI()
@@ -683,37 +725,27 @@ local function ToggleGUI()
     end
 end
 
--- Improved click/tap detection for mobile
 local logoClickTime = 0
-local isTouch = false
-
 LogoBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         logoClickTime = tick()
-        if input.UserInputType == Enum.UserInputType.Touch then
-            isTouch = true
-        end
         StartLogoDrag(input)
     end
 end)
 
 LogoBtn.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        -- Cek apakah ini touch yang sama
+        if input.UserInputType == Enum.UserInputType.Touch and input.KeyCode ~= LogoDragTouchId then
+            return
+        end
+        
         local clickDuration = tick() - logoClickTime
         EndLogoDrag()
         
-        -- Deteksi tap/clicks
-        if clickDuration < 0.3 then
+        if clickDuration < 0.2 then
             ToggleGUI()
         end
-        isTouch = false
-    end
-end)
-
--- Tambahkan touch tap untuk mobile
-LogoBtn.TouchTap:Connect(function()
-    if not LogoDragging then
-        ToggleGUI()
     end
 end)
 
@@ -721,6 +753,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     CloseGUI()
 end)
 
+-- Untuk mobile, tambahkan touch event juga
 CloseBtn.TouchTap:Connect(function()
     CloseGUI()
 end)
@@ -797,15 +830,7 @@ BackBtn.MouseButton1Click:Connect(function()
     PreviousPlayer()
 end)
 
-BackBtn.TouchTap:Connect(function()
-    PreviousPlayer()
-end)
-
 NextBtn.MouseButton1Click:Connect(function()
-    NextPlayer()
-end)
-
-NextBtn.TouchTap:Connect(function()
     NextPlayer()
 end)
 
@@ -813,134 +838,17 @@ TargetBtn.MouseButton1Click:Connect(function()
     NextPlayer()
 end)
 
-TargetBtn.TouchTap:Connect(function()
+-- Untuk mobile
+BackBtn.TouchTap:Connect(function()
+    PreviousPlayer()
+end)
+
+NextBtn.TouchTap:Connect(function()
     NextPlayer()
 end)
 
-ModeBtn.MouseButton1Click:Connect(function()
-    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
-    ModeBtn.Text = "MODE: " .. CurrentMode
-end)
-
-ModeBtn.TouchTap:Connect(function()
-    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
-    ModeBtn.Text = "MODE: " .. CurrentMode
-end)
-
-ViewBtn.MouseButton1Click:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    IsViewing = not IsViewing
-    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
-    
-    if IsViewing and TargetPlayer.Character then
-        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            Camera.CameraSubject = hum
-        end
-    else
-        if Player.Character then
-            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                Camera.CameraSubject = hum
-            end
-        end
-    end
-end)
-
-ViewBtn.TouchTap:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    IsViewing = not IsViewing
-    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
-    
-    if IsViewing and TargetPlayer.Character then
-        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            Camera.CameraSubject = hum
-        end
-    else
-        if Player.Character then
-            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                Camera.CameraSubject = hum
-            end
-        end
-    end
-end)
-
-FlingBtn.MouseButton1Click:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    
-    local char = Player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-    IsFlinging = not IsFlinging
-    
-    if IsFlinging then
-        if hrp then LastPosition = hrp.CFrame end
-        workspace.FallenPartsDestroyHeight = 0/0 
-        FlingBtn.Text = "STOP"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    else
-        FlingBtn.Text = "LAUNCH"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
-        
-        if hum and hrp and LastPosition then
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            hum.Sit = false
-            hrp.CFrame = LastPosition
-            task.wait(0.05)
-            hum.Jump = true 
-            LastPosition = nil
-        end
-
-        workspace.FallenPartsDestroyHeight = -500 
-    end
-end)
-
-FlingBtn.TouchTap:Connect(function()
-    if not TargetPlayer then 
-        TargetBtn.Text = "NO TARGET!"
-        return 
-    end
-    
-    local char = Player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-    IsFlinging = not IsFlinging
-    
-    if IsFlinging then
-        if hrp then LastPosition = hrp.CFrame end
-        workspace.FallenPartsDestroyHeight = 0/0 
-        FlingBtn.Text = "STOP"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    else
-        FlingBtn.Text = "LAUNCH"
-        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
-        
-        if hum and hrp and LastPosition then
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            hum.Sit = false
-            hrp.CFrame = LastPosition
-            task.wait(0.05)
-            hum.Jump = true 
-            LastPosition = nil
-        end
-
-        workspace.FallenPartsDestroyHeight = -500 
-    end
+TargetBtn.TouchTap:Connect(function()
+    NextPlayer()
 end)
 
 -- // VEHICLE LOGIC
@@ -1011,6 +919,133 @@ RunService.PostSimulation:Connect(function()
                 end
             end
         end
+    end
+end)
+
+ModeBtn.MouseButton1Click:Connect(function()
+    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
+    ModeBtn.Text = "MODE: " .. CurrentMode
+end)
+
+ViewBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    IsViewing = not IsViewing
+    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
+    
+    if IsViewing and TargetPlayer.Character then
+        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            Camera.CameraSubject = hum
+        end
+    else
+        if Player.Character then
+            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                Camera.CameraSubject = hum
+            end
+        end
+    end
+end)
+
+FlingBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    
+    local char = Player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    IsFlinging = not IsFlinging
+    
+    if IsFlinging then
+        if hrp then LastPosition = hrp.CFrame end
+        workspace.FallenPartsDestroyHeight = 0/0 
+        FlingBtn.Text = "STOP"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    else
+        FlingBtn.Text = "LAUNCH"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
+        
+        if hum and hrp and LastPosition then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hum.Sit = false
+            hrp.CFrame = LastPosition
+            task.wait(0.05)
+            hum.Jump = true 
+            LastPosition = nil
+        end
+
+        workspace.FallenPartsDestroyHeight = -500 
+    end
+end)
+
+-- Untuk mobile
+ModeBtn.TouchTap:Connect(function()
+    CurrentMode = (CurrentMode == "HELI" and "CAR" or "HELI")
+    ModeBtn.Text = "MODE: " .. CurrentMode
+end)
+
+ViewBtn.TouchTap:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    IsViewing = not IsViewing
+    ViewBtn.Text = IsViewing and "VIEW: ON" or "VIEW: OFF"
+    
+    if IsViewing and TargetPlayer.Character then
+        local hum = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            Camera.CameraSubject = hum
+        end
+    else
+        if Player.Character then
+            local hum = Player.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                Camera.CameraSubject = hum
+            end
+        end
+    end
+end)
+
+FlingBtn.TouchTap:Connect(function()
+    if not TargetPlayer then 
+        TargetBtn.Text = "NO TARGET!"
+        return 
+    end
+    
+    local char = Player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    IsFlinging = not IsFlinging
+    
+    if IsFlinging then
+        if hrp then LastPosition = hrp.CFrame end
+        workspace.FallenPartsDestroyHeight = 0/0 
+        FlingBtn.Text = "STOP"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    else
+        FlingBtn.Text = "LAUNCH"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 80)
+        
+        if hum and hrp and LastPosition then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hum.Sit = false
+            hrp.CFrame = LastPosition
+            task.wait(0.05)
+            hum.Jump = true 
+            LastPosition = nil
+        end
+
+        workspace.FallenPartsDestroyHeight = -500 
     end
 end)
 
