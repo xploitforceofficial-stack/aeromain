@@ -443,7 +443,7 @@ UIStroke.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "AERO V1"
+Title.Text = "AERO V2"
 Title.TextSize = 22 
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.BackgroundTransparency = 1
